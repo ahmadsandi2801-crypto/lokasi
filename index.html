@@ -1,0 +1,238 @@
+
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Berbagi Lokasi</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background: #f3f5f7;
+            margin: 0;
+            padding: 24px 16px;
+            color: #222;
+        }
+
+        .card {
+            background: white;
+            max-width: 480px;
+            margin: 30px auto;
+            padding: 24px;
+            border-radius: 14px;
+            box-shadow: 0 4px 18px #00000010;
+        }
+
+        h1 {
+            font-size: 24px;
+        }
+
+        .notice {
+            background: #f0f4f8;
+            padding: 14px;
+            border-radius: 8px;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .consent {
+            display: flex;
+            gap: 10px;
+            align-items: flex-start;
+            margin: 20px 0;
+            line-height: 1.5;
+        }
+
+        .consent input {
+            margin-top: 4px;
+        }
+
+        button {
+            width: 100%;
+            padding: 14px;
+            border: none;
+            border-radius: 8px;
+            background: #1769aa;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        button:disabled {
+            background: #999;
+            cursor: not-allowed;
+        }
+
+        #status {
+            margin-top: 18px;
+            line-height: 1.6;
+            overflow-wrap: anywhere;
+        }
+
+        #mapLink {
+            display: none;
+            margin-top: 12px;
+        }
+    </style>
+</head>
+
+<body>
+    <main class="card">
+        <h1>Berbagi Lokasi GPS</h1>
+
+        <p>
+            Halaman ini dapat membagikan lokasi perangkat
+            kepada pemilik website.
+        </p>
+
+        <div class="notice">
+            Jika kamu menyetujui dan memberikan izin lokasi,
+            koordinat GPS serta perkiraan akurasinya akan
+            dikirim ke server website dan dapat dilihat
+            oleh pemiliknya.
+        </div>
+
+        <label class="consent">
+            <input type="checkbox" id="persetujuan">
+            <span>
+                Saya memahami informasi di atas dan setuju
+                membagikan lokasi saya kepada pemilik website.
+            </span>
+        </label>
+
+        <button id="bagikanBtn" disabled>
+            Setuju dan Bagikan Lokasi
+        </button>
+
+        <p id="status" role="status">
+            Belum ada lokasi yang dibagikan.
+        </p>
+
+        <a id="mapLink"
+           href="#"
+           target="_blank"
+           rel="noopener noreferrer">
+            Lihat lokasi saya di Google Maps
+        </a>
+    </main>
+
+    <script>
+        const persetujuan =
+            document.getElementById("persetujuan");
+
+        const bagikanBtn =
+            document.getElementById("bagikanBtn");
+
+        const statusEl =
+            document.getElementById("status");
+
+        const mapLink =
+            document.getElementById("mapLink");
+
+        persetujuan.addEventListener("change", function () {
+            bagikanBtn.disabled = !persetujuan.checked;
+        });
+
+        bagikanBtn.addEventListener("click", function () {
+            if (!persetujuan.checked) {
+                return;
+            }
+
+            if (!navigator.geolocation) {
+                statusEl.textContent =
+                    "Browser tidak mendukung fitur lokasi.";
+                return;
+            }
+
+            bagikanBtn.disabled = true;
+            statusEl.textContent =
+                "Meminta izin dan mengambil lokasi GPS...";
+            mapLink.style.display = "none";
+
+            navigator.geolocation.getCurrentPosition(
+                async function (posisi) {
+                    const data = {
+                        consent: true,
+                        latitude: posisi.coords.latitude,
+                        longitude: posisi.coords.longitude,
+                        accuracy: posisi.coords.accuracy
+                    };
+
+                    try {
+                        const response = await fetch(
+                            "/api/location",
+                            {
+                                method: "POST",
+                                headers: {
+                                    "Content-Type": "application/json"
+                                },
+                                body: JSON.stringify(data)
+                            }
+                        );
+
+                        if (!response.ok) {
+                            throw new Error(
+                                "Server gagal menerima lokasi."
+                            );
+                        }
+
+                        const mapsUrl =
+                            `https://www.google.com/maps?q=` +
+                            `${data.latitude},${data.longitude}`;
+
+                        statusEl.textContent =
+                            "Lokasi berhasil dikirim ke server " +
+                            "pemilik website. Akurasi perkiraan: ±" +
+                            Math.round(data.accuracy) + " meter.";
+
+                        mapLink.href = mapsUrl;
+                        mapLink.style.display = "inline-block";
+
+                        bagikanBtn.textContent =
+                            "Lokasi sudah dikirim";
+
+                    } catch (error) {
+                        statusEl.textContent =
+                            "Lokasi belum berhasil dikirim. " +
+                            "Periksa koneksi internet lalu coba lagi.";
+
+                        bagikanBtn.disabled = false;
+                    }
+                },
+
+                function (error) {
+                    if (error.code === 1) {
+                        statusEl.textContent =
+                            "Izin lokasi ditolak. " +
+                            "Tidak ada lokasi yang dikirim.";
+                    } else if (error.code === 2) {
+                        statusEl.textContent =
+                            "Lokasi tidak tersedia. " +
+                            "Periksa pengaturan lokasi perangkat.";
+                    } else if (error.code === 3) {
+                        statusEl.textContent =
+                            "Waktu pengambilan lokasi habis. " +
+                            "Silakan coba lagi.";
+                    } else {
+                        statusEl.textContent =
+                            "Lokasi gagal diperoleh.";
+                    }
+
+                    bagikanBtn.disabled = false;
+                },
+
+                {
+                    enableHighAccuracy: true,
+                    timeout: 20000,
+                    maximumAge: 0
+                }
+            );
+        });
+    </script>
+</body>
+</html>
